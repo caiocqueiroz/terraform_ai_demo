@@ -11,10 +11,10 @@ permissions:
   pull-requests: write
 
 env:
-  WORK_DIR: "demos/Exemplo07-Completo"
-  RESOURCE_GROUP_NAME: "rg-treinamento-terraform"
+  WORK_DIR: "demos/Exemplo01-Basic"
+  RESOURCE_GROUP_NAME: "rg-caioqueiroz-terraform"
   RESOURCE_GROUP_LOCATION: "eastus"
-  STORAGE_ACCOUNT_NAME: "strtreinamentoterraform"
+  STORAGE_ACCOUNT_NAME: "strcaiocqueirozterraform"
 
 jobs:
   run-terraform:
