@@ -11,7 +11,7 @@ terraform {
     storage_account_name = "strtreinamentoterraform"
     container_name       = "tfstate"
     key                  = "exemplo02.tfstate"
-    access_key           = "oHN7zmgs6V+DbTET80VD7nZ0s2OXfq5MDRLceqZQ9rBLAwelDO7/ULJoWAAWM1a4hOs+DShgadgF+AStT0DnYQ=="
+    access_key           = ""
   }
   required_version = ">= 1.10.4"
 }
