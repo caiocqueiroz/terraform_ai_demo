@@ -1,0 +1,5 @@
+sigla            = "exe09"
+ambiente         = "prd"
+location         = "eastus"
+service_plan_sku = "S3"
+acr_sku          = "Basic"

@@ -1,0 +1,167 @@
+name: 'exemplo07-simple-open-ia.yml'
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions: 
+  contents: read
+  pull-requests: write
+
+env:
+  WORK_DIR: "demos/Exemplo07-Completo"
+  RESOURCE_GROUP_NAME: "rg-treinamento-terraform"
+  RESOURCE_GROUP_LOCATION: "eastus"
+  STORAGE_ACCOUNT_NAME: "strtreinamentoterraform"
+
+jobs:
+  run-terraform:
+    name: 'Run Terraform'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Axios package
+        run: npm install axios
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.ORG_AZ_CREDENTIALS }}
+      
+      - name: Create Resource Group
+        run: |
+          if [ $(az group exists --name ${{ env.RESOURCE_GROUP_NAME }}) = false ]; then
+            echo "Creating Resource group"
+            az group create --name ${{ env.RESOURCE_GROUP_NAME }} --location ${{ env.RESOURCE_GROUP_LOCATION }}
+
+            # Create Storage Account
+            echo "Creating Storage Account"
+            az storage account create --name ${{ env.STORAGE_ACCOUNT_NAME }} --resource-group ${{ env.RESOURCE_GROUP_NAME }} --location ${{ env.RESOURCE_GROUP_LOCATION }} --sku Standard_LRS
+
+            # Create container
+            echo "Creating container"
+            az storage container create --name tfstate --account-name ${{ env.STORAGE_ACCOUNT_NAME }}
+
+          else
+              echo "Resource group already exists"
+          fi
+
+      - name: Set Storage key variable
+        run: |
+          echo "Setting Storage Account Key"
+          ACCOUNT_KEY=$(az storage account keys list --resource-group ${{ env.RESOURCE_GROUP_NAME }} --account-name ${{ env.STORAGE_ACCOUNT_NAME }} --query '[0].value' -o tsv)
+          echo "ARM_ACCESS_KEY=$ACCOUNT_KEY" >> $GITHUB_ENV
+
+      - name: Set Subscription variable
+        run: | 
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+      
+      - name: Terraform Init
+        run: terraform init -no-color
+        working-directory: ${{ env.WORK_DIR }}
+
+      - name: Terraform Validate
+        run: terraform validate -no-color
+        working-directory: ${{ env.WORK_DIR }}
+
+      - name: Terraform Plan
+        run: terraform plan -out="main.tfplan" -no-color
+        working-directory: ${{ env.WORK_DIR }}
+      
+      - name: Terraform Show
+        run: terraform show -json main.tfplan > plan.json
+        working-directory: ${{ env.WORK_DIR }}
+      
+      - name: Read Terraform plan
+        id: read_plan
+        run: echo "resultPlan=$(cat plan.json)" >> $GITHUB_OUTPUT
+        working-directory: ${{ env.WORK_DIR }}
+      
+      - name: Call Azure AI Service Files Changed
+        uses: actions/github-script@v7
+        with:
+          #github-token: ${{ secrets.ORG_GH_PAT }}
+          script: |
+            const axios = require('axios');
+            const result1 = process.env.TERRAFORM_PLAN;
+            const apiKey = process.env.AZURE_OPENAI_API_KEY;
+            const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
+  
+            async function callAzureAI(prompt) {
+              const response = await axios.post(
+                `${endpoint}/openai/deployments/gpt-4o/chat/completions?api-version=2024-02-15-preview`,
+                {
+                  "messages": [
+                    {
+                      "role": "system",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": prompt
+                        }
+                      ]
+                    }
+                  ],
+                  "temperature": 0.7,
+                  "top_p": 0.95,
+                  "max_tokens": 4000
+                },
+                {
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'api-key': apiKey
+                  }
+                }
+              );
+              
+              const resultMessage = response.data.choices[0].message.content;
+              return resultMessage;
+            }
+  
+            async function addCommentToPR(pullRequestNumber, comment) {
+              await github.rest.issues.createComment({
+                issue_number: pullRequestNumber,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `Resultado da análise do Terraform Plan:\n\n ${comment}`
+              });
+            }
+            
+            async function processFiles() {
+              console.log(`--------------------- CALL OPEN AI ---------------------`);
+              
+              // Criar o prompt combinando o nome do arquivo e o patch
+              const promptAI = `You are a subject matter expert in cloud infrastructure, infrastructure as code, and terraform. Your task is to review the terraform execution plan. In your review, suggest improvements and code suggestions in the following areas: design for resource failures, performance, security and analyse if any provisioned resource depends on another resource and if all necessary permissions (RBAC) have been applied so that the resources can communicate correctly with each other. The terraform execution plan code is below:\n ${result1}\n For each improvement suggestion, rank the suggestions with severity from High, Medium, Low according to the priority of implementation.`;
+              const resultMessage = await callAzureAI(promptAI);
+              console.log(`--------------------- RESULT MESSAGE ---------------------`);
+              console.log(resultMessage);
+
+              // Atualizar o comentário no PR
+              console.log(`--------------------- ADD MESSAGE TO PR ---------------------`);
+              const pullRequestNumber = context.payload.pull_request.number;
+              console.log(`Pull Request Number: ${pullRequestNumber}`);
+              await addCommentToPR(pullRequestNumber, resultMessage);
+            }
+  
+            processFiles();
+        env:
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          TERRAFORM_PLAN: ${{ steps.read_plan.outputs.resultPlan }}
+
+      #- name: Terraform Apply
+      #  run: terraform apply "main.tfplan" -no-color
+      #  working-directory: ${{ env.WORK_DIR }}

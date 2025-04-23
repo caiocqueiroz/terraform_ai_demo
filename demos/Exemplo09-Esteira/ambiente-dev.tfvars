@@ -1,0 +1,5 @@
+sigla            = "exe09"
+ambiente         = "dev"
+location         = "eastus"
+service_plan_sku = "B1"
+acr_sku          = "Basic"
