@@ -71,6 +71,25 @@ resource "azurerm_linux_web_app" "webapp" {
   depends_on = [azurerm_service_plan.appserviceplan]
 }
 
+# Create the web app with a simple configuration
+resource "azurerm_linux_web_app" "webapp02" {
+  name                = "webapp-${random_integer.ri.result}"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  service_plan_id     = azurerm_service_plan.appserviceplan.id
+  
+  site_config {
+    application_stack {
+      php_version = "8.2"
+    }
+    always_on = false
+  }
+  
+  tags = var.tags
+  
+  depends_on = [azurerm_service_plan.appserviceplan]
+}
+
 # Output the web app URL
 output "webapp_url" {
   value = "https://${azurerm_linux_web_app.webapp.default_hostname}"

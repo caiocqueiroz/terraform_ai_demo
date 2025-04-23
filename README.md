@@ -39,7 +39,7 @@ To run the examples and modules in this workshop, follow the instructions below:
 
 ```bash
 # set subscription id variable
-$env:ARM_SUBSCRIPTION_ID="e84af34a-bbd2-4d60-8776-829485d3e735"
+$env:ARM_SUBSCRIPTION_ID="6701dd9b-01b4-4af0-b147-ec7beda70c8d"
 
 # terraform init
 terraform init
