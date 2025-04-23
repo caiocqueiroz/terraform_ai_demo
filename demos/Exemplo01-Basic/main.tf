@@ -3,7 +3,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = ">= 4.15.0"
+      version = ">= 3.85.0"
     }
   }
   required_version = ">= 1.10.4"
@@ -11,7 +11,7 @@ terraform {
 
 provider "azurerm" {
   features {}
-  subscription_id = "e84af34a-bbd2-4d60-8776-829485d3e735"
+  subscription_id = "5fc4702d-df2f-4cca-9680-1a88751a2464"
 }
 
 # Define a variable for tags
@@ -20,7 +20,7 @@ variable "tags" {
   type        = map(string)
   default = {
     ambiente = "workshop"
-    projeto  = "exe01"
+    projeto  = "exemplo01"
   }
 }
 
@@ -32,36 +32,46 @@ resource "random_integer" "ri" {
 
 # Create the resource group
 resource "azurerm_resource_group" "rg" {
-  name     = "rg-exe01"
-  location = "eastus"
+  name     = "rg-caiocqueiroz-exe"
+  location = "brazilsouth"
   tags     = var.tags
 }
 
-# Create the Linux App Service Plan
+# Create the Linux App Service Plan in Free tier
 resource "azurerm_service_plan" "appserviceplan" {
   name                = "plan-${random_integer.ri.result}"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   os_type             = "Linux"
-  sku_name            = "S1"
+  sku_name            = "F1"  # Free tier
   tags                = var.tags
-}
-
-# Create the web app, pass in the App Service Plan ID
-resource "azurerm_linux_web_app" "webapp" {
-  name                                           = "webapp-${random_integer.ri.result}"
-  location                                       = azurerm_resource_group.rg.location
-  resource_group_name                            = azurerm_resource_group.rg.name
-  service_plan_id                                = azurerm_service_plan.appserviceplan.id
-  https_only                                     = true
-  ftp_publish_basic_authentication_enabled       = false
-  webdeploy_publish_basic_authentication_enabled = false
-  site_config {
-    minimum_tls_version = "1.2"
+  
+  timeouts {
+    create = "30m"
+    delete = "30m"
   }
-  tags = var.tags
 }
 
-output "web_app_url" {
+# Create the web app with a simple configuration
+resource "azurerm_linux_web_app" "webapp" {
+  name                = "webapp-${random_integer.ri.result}"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  service_plan_id     = azurerm_service_plan.appserviceplan.id
+  
+  site_config {
+    application_stack {
+      php_version = "8.2"
+    }
+    always_on = false
+  }
+  
+  tags = var.tags
+  
+  depends_on = [azurerm_service_plan.appserviceplan]
+}
+
+# Output the web app URL
+output "webapp_url" {
   value = "https://${azurerm_linux_web_app.webapp.default_hostname}"
 }
